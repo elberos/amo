@@ -35,6 +35,12 @@ class Client extends Struct
 	protected $__cookie_file = "";
 	protected $__phone_id = "";
 	protected $__email_id = "";
+	protected $__utm_source_id = "";
+	protected $__utm_medium_id = "";
+	protected $__utm_campaign_id = "";
+	protected $__utm_content_id = "";
+	protected $__utm_term_id = "";
+	protected $__utm_host_id = "";
 	
 	
 	/**
@@ -543,7 +549,7 @@ class Client extends Struct
 			'responsible_user_id' => $manager_id,
 		];
 		
-		if ($phone != ""){
+		if ($phone != "" and $this->phone_id != ""){
 			$contact['custom_fields'][] = [
 				'id' => $this->phone_id,
 				'values' => array(
@@ -555,7 +561,7 @@ class Client extends Struct
 			];
 		}
 		
-		if ($email != ""){
+		if ($email != ""and $this->email_id != ""){
 			$contact['custom_fields'][] = [
 				'id' => $this->email_id,
 				'values' => array(
@@ -593,13 +599,14 @@ class Client extends Struct
 	/**
 	 * Create client
 	 */
-	public function createDeal($data)
+	public function createDeal($deal)
 	{
-		$deal_name = isset($data['deal_name']) ? $data['deal_name'] : "Заказ";
-		$contact_id = isset($data['contact_id']) ? $data['contact_id'] : 0;
-		$pipeline_id = isset($data['pipeline_id']) ? $data['pipeline_id'] : 0;
-		$status_id = isset($data['status_id']) ? $data['status_id'] : 0;
-		$manager_id = isset($data['manager_id']) ? $data['manager_id'] : 0;
+		$deal_name = isset($deal['deal_name']) ? $deal['deal_name'] : "Заказ";
+		$contact_id = isset($deal['contact_id']) ? $deal['contact_id'] : 0;
+		$pipeline_id = isset($deal['pipeline_id']) ? $deal['pipeline_id'] : 0;
+		$status_id = isset($deal['status_id']) ? $deal['status_id'] : 0;
+		$manager_id = isset($deal['manager_id']) ? $deal['manager_id'] : 0;
+		$data = isset($deal['data']) ? $deal['data'] : [];
 		
 		if ($contact_id == 0)
 		{
@@ -622,7 +629,7 @@ class Client extends Struct
 		}
 		
 		
-		$deal = [
+		$send = [
 			'name' => $deal_name,
 			'created_at' => time(),
 			'sale' => 0,
@@ -635,8 +642,68 @@ class Client extends Struct
 			'custom_fields' => [],
 		];
 		
+		/* Utm Source */
+		if (isset($data['utm_source']) and $this->utm_source_id != ""){
+			$send['custom_fields'][] = [
+				'id' => $this->utm_source_id,
+				'values' => [
+					[ 'value' => $data['utm_source'] ],
+				],
+			];
+		}
+		
+		/* Utm Medium */
+		if (isset($data['utm_medium']) and $this->utm_medium_id != ""){
+			$send['custom_fields'][] = [
+				'id' => $this->utm_medium_id,
+				'values' => [
+					[ 'value' => $data['utm_medium'] ],
+				],
+			];
+		}
+		
+		/* Utm Campaign */
+		if (isset($data['utm_campaign']) and $this->utm_campaign_id != ""){
+			$send['custom_fields'][] = [
+				'id' => $this->utm_campaign_id,
+				'values' => [
+					[ 'value' => $data['utm_campaign'] ],
+				],
+			];
+		}
+		
+		/* Utm Content */
+		if (isset($data['utm_content']) and $this->utm_content_id != ""){
+			$send['custom_fields'][] = [
+				'id' => $this->utm_content_id,
+				'values' => [
+					[ 'value' => $data['utm_content'] ],
+				],
+			];
+		}
+		
+		/* Utm Term */
+		if (isset($data['utm_term']) and $this->utm_term_id != ""){
+			$send['custom_fields'][] = [
+				'id' => $this->utm_term_id,
+				'values' => [
+					[ 'value' => $data['utm_term'] ],
+				],
+			];
+		}
+		
+		/* Utm Host */
+		if (isset($data['utm_host']) and $this->utm_host_id != ""){
+			$send['custom_fields'][] = [
+				'id' => $this->utm_host_id,
+				'values' => [
+					[ 'value' => $data['utm_host'] ],
+				],
+			];
+		}
+		
 		$url = $this->getSearchUrl('leads');
-		list($out, $code, $response) = $this->curl($url, ['add'=>[$deal]]);
+		list($out, $code, $response) = $this->curl($url, ['add'=>[$send]]);
 		if ($response)
 		{
 			$response = isset($response['_embedded']) ? $response['_embedded'] : null;
