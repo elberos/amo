@@ -33,17 +33,18 @@ class Client extends Struct
 	protected $__api_key = "";
 	protected $__account_info_file = "";
 	protected $__cookie_file = "";
-	
+	protected $__phone_id = "";
+	protected $__email_id = "";
 	
 	
 	/**
 	 * Set cache dir
 	 */
-	public function setCacheDir($dir)
+	public function setCacheDir($dir, $cookie_file = "client")
 	{
 		return $this->copy([
-			"cookie_file" => $dir . "/amocrm.cookie",
-			"account_info_file" => $dir . "/amocrm.data",
+			"cookie_file" => $dir . "/amocrm." . $cookie_file . ".cookie",
+			"account_info_file" => $dir . "/amocrm." . $cookie_file . ".data",
 		]);
 	}
 	
@@ -290,10 +291,10 @@ class Client extends Struct
 		$url = $this->getSearchUrl($type);
 		
 		$args = [];
-		if ($id != 0) $args[] = "id=" . $id;
-		if ($query) $args[] = "query=" . $query;
-		if ($offset) $args[] = "limit_offset=" . $offset;
-		if ($limit) $args[] = "limit_rows=" . $limit;
+		if ($id != 0) $args[] = "id=" . urlencode($id);
+		if ($query) $args[] = "query=" . urlencode($query);
+		if ($offset) $args[] = "limit_offset=" . urlencode($offset);
+		if ($limit) $args[] = "limit_rows=" . urlencode($limit);
 		
 		if (count($args) > 0)
 		{
@@ -309,6 +310,10 @@ class Client extends Struct
 		list($out, $code, $response) = $this->curl($url, null, $headers);
 		if ($response === null)
 		{
+			if ($code != 200 and $code != 204)
+			{
+				throw new \Exception("Amocrm search response error code " . $code);
+			}
 			return [];
 		}
 		
@@ -345,4 +350,326 @@ class Client extends Struct
 		return array_shift($items);
 	}
 	
+	
+	
+	/**
+	 * Returns contact by query
+	 */
+	public function findContacts($query)
+	{
+		$items = $this->search([
+			'type'=>static::SEARCH_CONTACT,
+			'query'=>$query,
+		]);
+		if ($items == null) return [];
+		return $items;
+	}
+	
+	
+	
+	/**
+	 * Returns field value
+	 */
+	public function getItemFieldValue($item, $id)
+	{
+		$result = [];
+		$custom_fields = isset($item['custom_fields']) ? $item['custom_fields'] : [];
+		foreach ($custom_fields as $field)
+		{
+			$field_id = isset($field['id']) ? $field['id'] : 0;
+			$values = isset($field['values']) ? $field['values'] : [];
+			if ($field_id == $id)
+			{
+				foreach ($values as $item)
+				{
+					$value = isset($item['value']) ? $item['value'] : '';
+					if ($value != "")
+					{
+						$result[] = $value;
+					}
+				}
+				break;
+			}
+		}
+		return $result;
+	}
+	
+	
+	
+	/**
+	 * Returns contact by query
+	 */
+	public function parseContactsFields($item)
+	{
+		$result = [
+			'item' => $item,
+		];
+		
+		$result['id'] = isset($item['id']) ? $item['id'] : '';
+		$result['name'] = isset($item['name']) ? $item['name'] : '';
+		$result['phones'] = $this->getItemFieldValue($item, $this->phone_id);
+		$result['emails'] = $this->getItemFieldValue($item, $this->email_id);
+		
+		return $result;
+	}
+	
+	
+	
+	/**
+	 * Получение оценки совпадения карточек
+	 * $item - контакт из амосрм
+	 * $client - данные клиента, которые нужно найти
+	 */
+	public function clientCalcGrade($item, $client)
+	{
+		$grade = 0;
+		
+		$client_name = mb_trim(isset($client['name']) ? $client['name'] : '');
+		$client_phone = mb_trim(isset($client['phone']) ? $client['phone'] : '');
+		$client_email = mb_trim(isset($client['email']) ? $client['email'] : '');
+		
+		$item_name = mb_trim(isset($item['name']) ? $item['name'] : '');
+		$item_phones = isset($item['phones']) ? $item['phones'] : [];
+		$item_emails = isset($item['emails']) ? $item['emails'] : [];
+		
+		$client_name = mb_strtolower($client_name);
+		$client_email = mb_strtolower($client_email);
+		$item_name = mb_strtolower($item_name);
+		
+		# Поиск по имени
+		if ($client_name == $item_name && $item_name != "") $grade += 2;
+		else if ($item_name == "" || $client_name == "") {}
+		else
+		{
+			if ( (strpos($item_name, $client_name) !== false || strpos($client_name, $item_name) !== false) &&
+				mb_strlen($item_name) > 2 && mb_strlen($client_name) > 2
+			)
+				$grade += 1;
+		}
+		
+		# Поиск по телефону
+		$find = false;
+		$client_phone = preg_replace("/[^0-9]/", '', $client_phone);
+		foreach ($item_phones as $val)
+		{
+			$val = preg_replace("/[^0-9]/", '', $val);
+			if ($client_phone == $val && $val != "")
+			{
+				$grade += 7;
+				$find = true;
+				break;
+			}
+		}
+		if (!$find && $client_phone != "")
+		{
+			$grade = -100;
+		}
+		
+		# Поиск по email
+		$find = false;
+		foreach ($item_emails as $val)
+		{
+			$val =  mb_strtolower(mb_trim($val));
+			if ($client_email == $val && $val != "")
+			{
+				$grade += 4;
+				$find = true;
+				break;
+			}
+		}
+		if (!$find && $client_email != "")
+		{
+			$grade = -100;
+		}
+		
+		return $grade;
+	}
+	
+	
+	
+	/**
+	 * Find client
+	 */
+	public function findClient($client)
+	{
+		$name = isset($client['name']) ? $client['name'] : '';
+		$phone = isset($client['phone']) ? $client['phone'] : '';
+		$email = isset($client['email']) ? $client['email'] : '';
+		
+		$result = [];
+		if ($phone != "") $result = array_merge($result, $this->findContacts($phone));
+		if ($email != "") $result = array_merge($result, $this->findContacts($email));
+		
+		$candidate = null;
+		$candidate_grade = 0;
+		foreach ($result as $item)
+		{
+			$item = $this->parseContactsFields($item);
+			$grade = $this->clientCalcGrade($item, $client);
+			if ($grade > $candidate_grade)
+			{
+				$candidate_grade = $grade;
+				$candidate = $item;
+			}
+			
+		}
+		
+		return [$candidate, $candidate_grade];
+	}
+	
+	
+	
+	/**
+	 * Create client
+	 */
+	public function createClient($client)
+	{
+		$name = isset($client['name']) ? $client['name'] : '';
+		$phone = isset($client['phone']) ? $client['phone'] : '';
+		$email = isset($client['email']) ? $client['email'] : '';
+		$manager_id = isset($client['manager_id']) ? $client['manager_id'] : 0;
+		
+		if ($manager_id == 0)
+		{
+			throw new \Exception("Create client error. Manager id is null");
+		}
+		
+		
+		$contact = [
+			'name' => $name,
+			'tags' => "клиент с сайта",
+			'created_at' => time(),
+			'custom_fields' => [],
+			'responsible_user_id' => $manager_id,
+		];
+		
+		if ($phone != ""){
+			$contact['custom_fields'][] = [
+				'id' => $this->phone_id,
+				'values' => array(
+					array(
+						'value' => $phone,
+						'enum' => "MOB"
+					)
+				),
+			];
+		}
+		
+		if ($email != ""){
+			$contact['custom_fields'][] = [
+				'id' => $this->email_id,
+				'values' => array(
+					array(
+						'value' => $email,
+						'enum' => "WORK"
+					)
+				),
+			];
+		}
+		
+		// Send request
+		$url = $this->getSearchUrl('contacts');
+		list($out, $code, $response) = $this->curl($url, ['add'=>[$contact]]);
+		if ($response)
+		{
+			$Items = $response['_embedded']['items'];
+			$Item = array_shift($Items);
+			if ($Item){
+				return $Item['id'];
+			}
+		}
+		else
+		{
+			throw new \Exception("Create client error. Response error " . $code);
+			//var_xdump($code);
+			//var_dump($out);
+		}
+		
+		return 0;
+	}
+	
+	
+	
+	/**
+	 * Create client
+	 */
+	public function createDeal($data)
+	{
+		$deal_name = isset($data['deal_name']) ? $data['deal_name'] : "Заказ";
+		$contact_id = isset($data['contact_id']) ? $data['contact_id'] : 0;
+		$pipeline_id = isset($data['pipeline_id']) ? $data['pipeline_id'] : 0;
+		$status_id = isset($data['status_id']) ? $data['status_id'] : 0;
+		$manager_id = isset($data['manager_id']) ? $data['manager_id'] : 0;
+		
+		if ($contact_id == 0)
+		{
+			throw new \Exception("Create deal error. Contact id is null");
+		}
+		
+		if ($pipeline_id == 0)
+		{
+			throw new \Exception("Create deal error. Pipeline id is null");
+		}
+		
+		if ($status_id == 0)
+		{
+			throw new \Exception("Create deal error. Status id is null");
+		}
+		
+		if ($manager_id == 0)
+		{
+			throw new \Exception("Create deal error. Manager id is null");
+		}
+		
+		
+		$deal = [
+			'name' => $deal_name,
+			'created_at' => time(),
+			'sale' => 0,
+			'pipeline_id' => $pipeline_id,
+			'status_id' => $status_id,
+			'responsible_user_id' => $manager_id,
+			'contacts_id' => [
+				$contact_id,
+			],
+			'custom_fields' => [],
+		];
+		
+		$url = $this->getSearchUrl('leads');
+		list($out, $code, $response) = $this->curl($url, ['add'=>[$deal]]);
+		if ($response)
+		{
+			$response = isset($response['_embedded']) ? $response['_embedded'] : null;
+			if ($response)
+			{
+				$items = isset($response['items']) ? $response['items'] : null;
+				if ($items && count($items) > 0)
+				{
+					$item = $items[0];
+					$deal_id = isset($item['id']) ? $item['id'] : null;
+					return $deal_id;
+				}
+			}
+		}
+		else
+		{
+			throw new \Exception("Create deal error. Response error " . $code);
+			//var_dump( @json_decode($out, true) );
+		}
+		
+		return 0;
+	}
+	
+}
+
+
+/**
+ * Trim UTF-8 string
+ */
+function mb_trim($name)
+{
+	if ($name == null) return "";
+	$name = preg_replace('/^[\x00-\x1F\x7F\s]+/u', '', $name);
+	$name = preg_replace('/[\x00-\x1F\x7F\s]+$/u', '', $name); 
+	return $name;
 }
