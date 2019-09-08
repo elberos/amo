@@ -45,9 +45,12 @@ class Helper
 	/**
 	 * Load account info from file
 	 */
-	public static function loadAccountInfo($file)
+	public static function loadAccountInfo($file, $cache_timeout)
 	{
 		if (!file_exists($file)) return [null, null, null, false];
+		
+		$last = filemtime($file);
+		if ($last + $cache_timeout < time()) return [null, null, null, false];
 		
 		$json = file_get_contents($file);
 		$json = @json_decode($json);
@@ -66,9 +69,9 @@ class Helper
 	/**
 	 * Returns field valueds
 	 */
-	public static function getContactFieldValues($contact, $field_id)
+	public static function getItemFieldValue($item, $field_id)
 	{
-		$custom_fields = isset($contact['custom_fields']) ? $contact['custom_fields'] : null;
+		$custom_fields = isset($item['custom_fields']) ? $item['custom_fields'] : null;
 		if ($custom_fields == null) return [];
 		
 		$res = [];
@@ -85,10 +88,115 @@ class Helper
 						if ($value) $res[] = $value;
 					}
 				}
+				break;
 			}
 		}
 		
 		return $res;
 	}
 	
+	
+	
+	/**
+	 * Parser contacts
+	 */
+	public static function parseContactsFields($item, $phone_id, $email_id)
+	{
+		$result = [
+			'item' => $item,
+		];
+		
+		$result['id'] = isset($item['id']) ? $item['id'] : '';
+		$result['name'] = isset($item['name']) ? $item['name'] : '';
+		$result['phones'] = static::getItemFieldValue($item, $this->phone_id);
+		$result['emails'] = static::getItemFieldValue($item, $this->email_id);
+		
+		return $result;
+	}
+	
+	
+	
+	/**
+	 * Получение оценки совпадения карточек
+	 * $item - контакт из амосрм
+	 * $client - данные клиента, которые нужно найти
+	 */
+	public static function clientCalcGrade($item, $client)
+	{
+		$grade = 0;
+		
+		$client_name = mb_trim(isset($client['name']) ? $client['name'] : '');
+		$client_phone = mb_trim(isset($client['phone']) ? $client['phone'] : '');
+		$client_email = mb_trim(isset($client['email']) ? $client['email'] : '');
+		
+		$item_name = mb_trim(isset($item['name']) ? $item['name'] : '');
+		$item_phones = isset($item['phones']) ? $item['phones'] : [];
+		$item_emails = isset($item['emails']) ? $item['emails'] : [];
+		
+		$client_name = mb_strtolower($client_name);
+		$client_email = mb_strtolower($client_email);
+		$item_name = mb_strtolower($item_name);
+		
+		# Поиск по имени
+		if ($client_name == $item_name && $item_name != "") $grade += 2;
+		else if ($item_name == "" || $client_name == "") {}
+		else
+		{
+			if ( (strpos($item_name, $client_name) !== false || strpos($client_name, $item_name) !== false) &&
+				mb_strlen($item_name) > 2 && mb_strlen($client_name) > 2
+			)
+				$grade += 1;
+		}
+		
+		# Поиск по телефону
+		$find = false;
+		$client_phone = preg_replace("/[^0-9]/", '', $client_phone);
+		foreach ($item_phones as $val)
+		{
+			$val = preg_replace("/[^0-9]/", '', $val);
+			if ($client_phone == $val && $val != "")
+			{
+				$grade += 7;
+				$find = true;
+				break;
+			}
+		}
+		if (!$find && $client_phone != "")
+		{
+			$grade = -100;
+		}
+		
+		# Поиск по email
+		$find = false;
+		foreach ($item_emails as $val)
+		{
+			$val =  mb_strtolower(mb_trim($val));
+			if ($client_email == $val && $val != "")
+			{
+				$grade += 4;
+				$find = true;
+				break;
+			}
+		}
+		if (!$find && $client_email != "")
+		{
+			$grade = -100;
+		}
+		
+		return $grade;
+	}
+	
+}
+
+
+
+/**
+ * Trim UTF-8 string
+ */
+function mb_trim($name)
+{
+	if ($name == null) return "";
+	$name = preg_replace('/^[\x00-\x1F\x7F\s]+/u', '', $name);
+	$name = preg_replace('/[\x00-\x1F\x7F\s]+$/u', '', $name); 
+	return $name;
 }

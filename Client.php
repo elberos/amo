@@ -20,6 +20,7 @@
 
 namespace Elberos\Amo;
 
+use Elberos\Amo\Helper;
 use Elberos\Core\Struct;
 
 
@@ -31,16 +32,15 @@ class Client extends Struct
 	protected $__domain = "";
 	protected $__login = "";
 	protected $__api_key = "";
+	protected $__cache_prefix = "";
+	protected $__cache_timeout = 24*60*60;
 	protected $__account_info_file = "";
 	protected $__cookie_file = "";
 	protected $__phone_id = "";
 	protected $__email_id = "";
-	protected $__utm_source_id = "";
-	protected $__utm_medium_id = "";
-	protected $__utm_campaign_id = "";
-	protected $__utm_content_id = "";
-	protected $__utm_term_id = "";
-	protected $__utm_host_id = "";
+	protected $__users = null;
+	protected $__custom_field = null;
+	protected $__pipelines = null;
 	
 	
 	/**
@@ -246,9 +246,10 @@ class Client extends Struct
 		$users = null;
 		$custom_field = null;
 		$pipelines = null;
+		$update = false;
 		
 		list($users, $custom_fields, $pipelines, $success) = 
-			\Elberos\Amo\Helper::loadAccountInfo($this->account_info_file);
+			\Elberos\Amo\Helper::loadAccountInfo($this->account_info_file, $this->cache_timeout);
 		
 		
 		if (!$success)
@@ -258,12 +259,22 @@ class Client extends Struct
 			{
 				list($users, $custom_fields, $pipelines) = $this->getAccountInfo();
 				\Elberos\Amo\Helper::saveAccountInfo($this->account_info_file, $users, $custom_fields, $pipelines);
+				$update = true;
 				$success = true;
 			}
 		}
 		
 		
-		return [$amocrm, $users, $custom_fields, $pipelines, $success];
+		if ($success)
+		{
+			$amocrm = $amocrm->copy([
+				"users"=>$users,
+				"custom_field"=>$custom_field,
+				"pipelines"=>$pipelines,
+			]);
+		}
+		
+		return [$amocrm, $users, $custom_fields, $pipelines, $success, $update];
 	}
 	
 	
@@ -374,126 +385,6 @@ class Client extends Struct
 	
 	
 	/**
-	 * Returns field value
-	 */
-	public function getItemFieldValue($item, $id)
-	{
-		$result = [];
-		$custom_fields = isset($item['custom_fields']) ? $item['custom_fields'] : [];
-		foreach ($custom_fields as $field)
-		{
-			$field_id = isset($field['id']) ? $field['id'] : 0;
-			$values = isset($field['values']) ? $field['values'] : [];
-			if ($field_id == $id)
-			{
-				foreach ($values as $item)
-				{
-					$value = isset($item['value']) ? $item['value'] : '';
-					if ($value != "")
-					{
-						$result[] = $value;
-					}
-				}
-				break;
-			}
-		}
-		return $result;
-	}
-	
-	
-	
-	/**
-	 * Returns contact by query
-	 */
-	public function parseContactsFields($item)
-	{
-		$result = [
-			'item' => $item,
-		];
-		
-		$result['id'] = isset($item['id']) ? $item['id'] : '';
-		$result['name'] = isset($item['name']) ? $item['name'] : '';
-		$result['phones'] = $this->getItemFieldValue($item, $this->phone_id);
-		$result['emails'] = $this->getItemFieldValue($item, $this->email_id);
-		
-		return $result;
-	}
-	
-	
-	
-	/**
-	 * Получение оценки совпадения карточек
-	 * $item - контакт из амосрм
-	 * $client - данные клиента, которые нужно найти
-	 */
-	public function clientCalcGrade($item, $client)
-	{
-		$grade = 0;
-		
-		$client_name = mb_trim(isset($client['name']) ? $client['name'] : '');
-		$client_phone = mb_trim(isset($client['phone']) ? $client['phone'] : '');
-		$client_email = mb_trim(isset($client['email']) ? $client['email'] : '');
-		
-		$item_name = mb_trim(isset($item['name']) ? $item['name'] : '');
-		$item_phones = isset($item['phones']) ? $item['phones'] : [];
-		$item_emails = isset($item['emails']) ? $item['emails'] : [];
-		
-		$client_name = mb_strtolower($client_name);
-		$client_email = mb_strtolower($client_email);
-		$item_name = mb_strtolower($item_name);
-		
-		# Поиск по имени
-		if ($client_name == $item_name && $item_name != "") $grade += 2;
-		else if ($item_name == "" || $client_name == "") {}
-		else
-		{
-			if ( (strpos($item_name, $client_name) !== false || strpos($client_name, $item_name) !== false) &&
-				mb_strlen($item_name) > 2 && mb_strlen($client_name) > 2
-			)
-				$grade += 1;
-		}
-		
-		# Поиск по телефону
-		$find = false;
-		$client_phone = preg_replace("/[^0-9]/", '', $client_phone);
-		foreach ($item_phones as $val)
-		{
-			$val = preg_replace("/[^0-9]/", '', $val);
-			if ($client_phone == $val && $val != "")
-			{
-				$grade += 7;
-				$find = true;
-				break;
-			}
-		}
-		if (!$find && $client_phone != "")
-		{
-			$grade = -100;
-		}
-		
-		# Поиск по email
-		$find = false;
-		foreach ($item_emails as $val)
-		{
-			$val =  mb_strtolower(mb_trim($val));
-			if ($client_email == $val && $val != "")
-			{
-				$grade += 4;
-				$find = true;
-				break;
-			}
-		}
-		if (!$find && $client_email != "")
-		{
-			$grade = -100;
-		}
-		
-		return $grade;
-	}
-	
-	
-	
-	/**
 	 * Find client
 	 */
 	public function findClient($client)
@@ -510,8 +401,8 @@ class Client extends Struct
 		$candidate_grade = 0;
 		foreach ($result as $item)
 		{
-			$item = $this->parseContactsFields($item);
-			$grade = $this->clientCalcGrade($item, $client);
+			$item = Helper::parseContactsFields($item);
+			$grade = Helper::clientCalcGrade($item, $client);
 			if ($grade > $candidate_grade)
 			{
 				$candidate_grade = $grade;
@@ -531,6 +422,7 @@ class Client extends Struct
 	public function createClient($client)
 	{
 		$name = isset($client['name']) ? $client['name'] : '';
+		$tags = isset($client['tags']) ? $client['tags'] : '';
 		$phone = isset($client['phone']) ? $client['phone'] : '';
 		$email = isset($client['email']) ? $client['email'] : '';
 		$manager_id = isset($client['manager_id']) ? $client['manager_id'] : 0;
@@ -540,10 +432,9 @@ class Client extends Struct
 			throw new \Exception("Create client error. Manager id is null");
 		}
 		
-		
 		$contact = [
 			'name' => $name,
-			'tags' => "клиент с сайта",
+			'tags' => $tags,
 			'created_at' => time(),
 			'custom_fields' => [],
 			'responsible_user_id' => $manager_id,
@@ -642,66 +533,6 @@ class Client extends Struct
 			'custom_fields' => [],
 		];
 		
-		/* Utm Source */
-		if (isset($data['utm_source']) and $this->utm_source_id != ""){
-			$send['custom_fields'][] = [
-				'id' => $this->utm_source_id,
-				'values' => [
-					[ 'value' => $data['utm_source'] ],
-				],
-			];
-		}
-		
-		/* Utm Medium */
-		if (isset($data['utm_medium']) and $this->utm_medium_id != ""){
-			$send['custom_fields'][] = [
-				'id' => $this->utm_medium_id,
-				'values' => [
-					[ 'value' => $data['utm_medium'] ],
-				],
-			];
-		}
-		
-		/* Utm Campaign */
-		if (isset($data['utm_campaign']) and $this->utm_campaign_id != ""){
-			$send['custom_fields'][] = [
-				'id' => $this->utm_campaign_id,
-				'values' => [
-					[ 'value' => $data['utm_campaign'] ],
-				],
-			];
-		}
-		
-		/* Utm Content */
-		if (isset($data['utm_content']) and $this->utm_content_id != ""){
-			$send['custom_fields'][] = [
-				'id' => $this->utm_content_id,
-				'values' => [
-					[ 'value' => $data['utm_content'] ],
-				],
-			];
-		}
-		
-		/* Utm Term */
-		if (isset($data['utm_term']) and $this->utm_term_id != ""){
-			$send['custom_fields'][] = [
-				'id' => $this->utm_term_id,
-				'values' => [
-					[ 'value' => $data['utm_term'] ],
-				],
-			];
-		}
-		
-		/* Utm Host */
-		if (isset($data['utm_host']) and $this->utm_host_id != ""){
-			$send['custom_fields'][] = [
-				'id' => $this->utm_host_id,
-				'values' => [
-					[ 'value' => $data['utm_host'] ],
-				],
-			];
-		}
-		
 		$url = $this->getSearchUrl('leads');
 		list($out, $code, $response) = $this->curl($url, ['add'=>[$send]]);
 		if ($response)
@@ -727,16 +558,4 @@ class Client extends Struct
 		return 0;
 	}
 	
-}
-
-
-/**
- * Trim UTF-8 string
- */
-function mb_trim($name)
-{
-	if ($name == null) return "";
-	$name = preg_replace('/^[\x00-\x1F\x7F\s]+/u', '', $name);
-	$name = preg_replace('/[\x00-\x1F\x7F\s]+$/u', '', $name); 
-	return $name;
 }
