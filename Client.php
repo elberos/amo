@@ -99,9 +99,9 @@ class Client extends Struct
 	/**
 	 * Returns search url
 	 */
-	public function getSearchUrl($type)
+	public function getSearchUrl($kind)
 	{
-		return "https://" . $this->getDomain() . '/api/v2/' . $type;
+		return "https://" . $this->getDomain() . '/api/v2/' . $kind;
 	}
 	
 	
@@ -286,18 +286,22 @@ class Client extends Struct
      */
     public function search($params)
     {
+		$kind = isset($params['kind']) ? $params['kind'] : "";
 		$type = isset($params['type']) ? $params['type'] : "";
 		$id = isset($params['id']) ? (int)$params['id'] : 0;
+		$element_id = isset($params['element_id']) ? (int)$params['element_id'] : null;
 		$query = isset($params['query']) ? $params['query'] : "";
-		$offset = isset($params['offset']) ? (int)$params['offset'] : 0;
-		$limit = isset($params['limit']) ? (int)$params['limit'] : 0;
+		$offset = isset($params['offset']) ? (int)$params['offset'] : null;
+		$limit = isset($params['limit']) ? (int)$params['limit'] : null;
 		$modified_since = isset($params['modified_since']) ? (int)$params['modified_since'] : null;
 		if ($limit > 500) $limit = 500;
 		
-		$url = $this->getSearchUrl($type);
+		$url = $this->getSearchUrl($kind);
 		
 		$args = [];
 		if ($id != 0) $args[] = "id=" . urlencode($id);
+		if ($type) $args[] = "type=" . urlencode($type);
+		if ($element_id) $args[] = "element_id=" . urlencode($element_id);
 		if ($query) $args[] = "query=" . urlencode($query);
 		if ($offset) $args[] = "limit_offset=" . urlencode($offset);
 		if ($limit) $args[] = "limit_rows=" . urlencode($limit);
@@ -310,7 +314,9 @@ class Client extends Struct
 		$headers = [];
 		if ($modified_since !== null)
 		{
-			$headers[] = 'IF-MODIFIED-SINCE: ' . $modified_since->format(DateTime::RFC1123);
+			$dt = new \DateTime();
+			$dt->setTimestamp($modified_since);
+			$headers[] = 'IF-MODIFIED-SINCE: ' . $dt->format(\DateTime::RFC1123);
 		}
 		
 		list($out, $code, $response) = $this->curl($url, null, $headers);
@@ -334,7 +340,7 @@ class Client extends Struct
 	public function getDeal($deal_id)
 	{
 		$items = $this->search([
-			'type'=>static::SEARCH_LEADS,
+			'kind'=>static::SEARCH_LEADS,
 			'id'=>$deal_id,
 		]);
 		if ($items == null) return null;
@@ -349,7 +355,7 @@ class Client extends Struct
 	public function getContact($contact_id)
 	{
 		$items = $this->search([
-			'type'=>static::SEARCH_CONTACT,
+			'kind'=>static::SEARCH_CONTACT,
 			'id'=>$contact_id,
 		]);
 		if ($items == null) return null;
@@ -364,7 +370,7 @@ class Client extends Struct
 	public function findContacts($query)
 	{
 		$items = $this->search([
-			'type'=>static::SEARCH_CONTACT,
+			'kind'=>static::SEARCH_CONTACT,
 			'query'=>$query,
 		]);
 		if ($items == null) return [];
