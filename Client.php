@@ -281,10 +281,11 @@ class Client extends Struct
 	const SEARCH_CONTACT = "contacts";
 	const SEARCH_COMPANY = "companies";
 	const SEARCH_LEADS = "leads";
+	const SEARCH_NOTES = "notes";
 	
 	
 	/**
-     * @param string           $type
+     * @param string           $kind
      * @param string           $query
      * @param integer          $limit
      * @param integer          $offset

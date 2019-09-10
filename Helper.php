@@ -53,14 +53,14 @@ class Helper
 		if ($last + $cache_timeout < time()) return [null, null, null, false];
 		
 		$json = file_get_contents($file);
-		$json = @json_decode($json);
+		$json = @json_decode($json, true);
 		if (!$json)
 		{
 			return [null, null, null, false];
 		}
-		$users = $json->users;
-		$custom_fields = $json->custom_fields;
-		$pipelines = $json->pipelines;
+		$users = $json['users'];
+		$custom_fields = $json['custom_fields'];
+		$pipelines = $json['pipelines'];
 		return [$users, $custom_fields, $pipelines, true];
 	}
 	
@@ -184,6 +184,49 @@ class Helper
 		}
 		
 		return $grade;
+	}
+	
+	
+	
+	/**
+	 * Get user name by id
+	 */
+	static function getUserName($users, $user_id)
+	{
+		foreach ($users as $user)
+		{
+			if ($user['id'] == $user_id) return $user['name'];
+		}
+		return "";
+	}
+	
+	
+	
+	/**
+	 * Get user name by id
+	 */
+	static function getPipelineStatusName($pipelines, $pipeline_id, $status_id)
+	{
+		foreach ($pipelines as $pipeline)
+		{
+			if
+			(
+				$pipeline['id'] == $pipeline_id and
+				isset($pipeline['statuses']) and
+				gettype($pipeline['statuses']) == 'array'
+			)
+			{
+				foreach ($pipeline['statuses'] as $status)
+				{
+					if ($status['id'] == $status_id)
+					{
+						return [$pipeline['name'], $status['name']];
+					}
+				}
+			
+			}
+		}
+		return "";
 	}
 	
 }
