@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: AmoCRM
+ * Plugin Name: Elberos AmoCRM
  * Description: AmoCRM Integration
  * Author:      Ildar Bikmamatov <support@bayrell.org>
  * License:     Apache License 2.0
@@ -21,6 +21,12 @@
 /* Check if Wordpress */
 if (!defined("ABSPATH")) exit;
 
+function load_elberos_amocrm()
+{
+	include_once __DIR__ . "/src/Client.php";
+	include_once __DIR__ . "/src/Settings.php";
+}
+
 /* Disable updates */
 add_filter("site_transient_update_plugins", function($value){
 	$name = plugin_basename(__FILE__);
@@ -38,10 +44,17 @@ add_action('admin_menu', function(){
 		'manage_options', 'amocrm',
 		function ()
 		{
-			include_once __DIR__ . "/src/Settings.php";
+			load_elberos_amocrm();
 			$settings = new \Elberos\AmoCRM\Settings();
 			$settings->show();
 		},
 		null, 30
 	);
+});
+
+/* Register json auth */
+add_action('wp_ajax_amocrm_auth', function(){
+	load_elberos_amocrm();
+	$settings = new \Elberos\AmoCRM\Settings();
+	$settings->apiAuth();
 });
