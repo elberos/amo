@@ -50,7 +50,7 @@ class Client
 	 */
 	public function isAuthFail()
 	{
-		return $this->auth === false;
+		return $this->auth && isset($this->auth["error"]);
 	}
 	
 	
@@ -228,6 +228,17 @@ class Client
 	
 	
 	/**
+	 * Обновляет авторизацию
+	 */
+	public function refreshAuth()
+	{
+		$this->auth = get_option("amocrm_auth");
+		$this->refresh_token = $this->auth["refresh_token"];
+		$this->auth();
+	}
+	
+	
+	/**
 	 * Возвращает ошибку авторизации
 	 */
 	public function getAuthError()
@@ -241,6 +252,38 @@ class Client
 		if (isset($json["title"])) $arr[] = $json["title"];
 		if (isset($json["hint"])) $arr[] = $json["hint"];
 		return implode(". ", $arr);
+	}
+	
+	
+	/**
+	 * Возвращает список воронок
+	 */
+	public function getPipelines()
+	{
+		if (!$this->account_info) return [];
+		return isset($this->account_info["pipelines"]) ? $this->account_info["pipelines"] : [];
+	}
+	
+	
+	/**
+	 * Возвращает текущую воронку
+	 */
+	public function getCurrentPipeline()
+	{
+		if (!$this->account_info) return null;
+		return isset($this->account_info["current_pipeline"]) ?
+			$this->account_info["current_pipeline"] : null;
+	}
+	
+	
+	/**
+	 * Возвращает текущий статус
+	 */
+	public function getCurrentStatus()
+	{
+		if (!$this->account_info) return null;
+		return isset($this->account_info["current_status"]) ?
+			$this->account_info["current_status"] : null;
 	}
 	
 	
@@ -259,13 +302,38 @@ class Client
 			return false;
 		}
 		
+		/* Инициализация информации об аккаунте */
+		if ($this->account_info == null)
+		{
+			$this->account_info = [];
+		}
+		
 		/* Анализируем ответ */
 		$data = $response['_embedded'];
-		$this->account_info = [
-			"timestamp" => time() + $this->cache_timeout,
-			"users_groups" => isset($data['users_groups']) ? $data['users_groups'] : [],
-			"task_types" => isset($data['task_types']) ? $data['task_types'] : [],
-		];
+		$this->account_info["timestamp"] = time() + $this->cache_timeout;
+		$this->account_info["users_groups"] = isset($data['users_groups']) ?
+			$data['users_groups'] : [];
+		$this->account_info["task_types"] = isset($data['task_types']) ? $data['task_types'] : [];
+				
+		/* Получить список воронок */
+		$url = $this->getSearchUrl("leads/pipelines");
+		list($out, $code, $response) = $this->sendApi($url);
+		if ($response && isset($response['_embedded']))
+		{
+			$data = $response['_embedded'];
+			$this->account_info["pipelines"] = isset($data["pipelines"]) ? $data["pipelines"] : [];
+		}
+		
+		/* Сохранить */
+		$this->saveAccountInfo();
+	}
+	
+	
+	/**
+	 * Сохранить данные аккаунта
+	 */
+	public function saveAccountInfo()
+	{
 		update_option("amocrm_account_info", $this->account_info);
 	}
 	
@@ -278,7 +346,6 @@ class Client
 		if (!$this->isAuth()) return;
 		
 		/* Получаем данные аккаунта из кэша */
-		$this->account_info = get_option("amocrm_account_info");
 		if ($this->account_info && $this->account_info["timestamp"] > time())
 		{
 			return;
@@ -295,29 +362,32 @@ class Client
 	function readSettings()
 	{
 		$settings = get_option("amocrm_settings");
+		
+		/* Auth */
+		$this->auth = get_option("amocrm_auth");
 		$this->auth_domain = isset($settings["auth_domain"]) ? $settings["auth_domain"] : "";
 		$this->auth_id = isset($settings["auth_id"]) ? $settings["auth_id"] : "";
 		$this->auth_key = isset($settings["auth_key"]) ? $settings["auth_key"] : "";
 		$this->auth_redirect_uri = isset($settings["auth_redirect_uri"]) ?
 			$settings["auth_redirect_uri"] : "";
+		
+		/* Account info */
+		$this->account_info = get_option("amocrm_account_info");
 	}
 	
 	
 	/**
 	 * Инициализация
 	 */
-	function init($refresh = false)
+	function init()
 	{
-		$this->auth = get_option("amocrm_auth");
-		if ($refresh)
-		{
-			if (isset($this->auth["error"])) unset($this->auth["error"]);
-		}
+		$this->readSettings();
+		if ($this->isAuthFail()) return;
 		
 		/* Проверка авторизации */
 		if ($this->isAuth())
 		{
-			if ($refresh || $this->auth["server_time"] + $this->auth["expires_in"] < time() - 60 * 60)
+			if ($this->auth["server_time"] + $this->auth["expires_in"] < time() - 60 * 60)
 			{
 				$this->refresh_token = $this->auth["refresh_token"];
 			}
@@ -325,10 +395,6 @@ class Client
 		
 		/* Авторизация */
 		if (!$this->isAuth() || $this->refresh_token) $this->auth();
-		
-		/* Загружаем данные */
-		if ($refresh) $this->getAccountInfo();
-		else $this->updateAccountInfo();
 	}
 	
 	

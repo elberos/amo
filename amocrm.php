@@ -52,9 +52,31 @@ add_action('admin_menu', function(){
 	);
 });
 
-/* Register json auth */
-add_action('wp_ajax_amocrm_auth', function(){
+/* Update settings */
+add_action('wp_ajax_amocrm_settings', function(){
+	
+	if (!isset($_POST['_nonce']) || !wp_verify_nonce($_POST['_nonce'], 'amocrm_settings_nonce'))
+	{
+		wp_send_json_error("Ошибка безопасности");
+	}
+	
 	load_elberos_amocrm();
 	$settings = new \Elberos\AmoCRM\Settings();
-	$settings->apiAuth();
+	$json = $settings->apiUpdate();
+	wp_send_json($json);
+});
+
+/* Register json auth */
+add_action('wp_ajax_amocrm_auth', function(){
+	
+	if (!isset($_POST['_nonce']) || !wp_verify_nonce($_POST['_nonce'], 'amocrm_auth_nonce'))
+	{
+		wp_send_json_error("Ошибка безопасности");
+	}
+	
+	load_elberos_amocrm();
+	$settings = new \Elberos\AmoCRM\Settings();
+	$auth_code = isset($_POST["auth_code"]) ? $_POST["auth_code"] : "";
+	$json = $settings->apiAuth($auth_code);
+	wp_send_json($json);
 });
