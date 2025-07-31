@@ -94,7 +94,6 @@ class Import
 			
 			/* Отправить в AmoCRM */
 			$result = $this->sendAmoCRM($client);
-			var_dump($result);
 			
 			/* Обновляем ID */
 			update_option("amocrm_gutenverse_id", $item->post_id);
