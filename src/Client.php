@@ -59,7 +59,7 @@ class Client
 	 */
 	public static function getUserAgent()
 	{
-		return 'AmoCRM-API-client/1.0';
+		return "AmoCRM-API-client/1.0";
 	}
 	
 	
@@ -77,7 +77,7 @@ class Client
 	 */
 	public function getAuthUrl()
 	{
-		return "https://" . $this->getDomain() . '/oauth2/access_token';
+		return "https://" . $this->getDomain() . "/oauth2/access_token";
 	}
 	
 	
@@ -86,7 +86,7 @@ class Client
 	 */
 	public function getSearchUrl($kind)
 	{
-		return "https://" . $this->getDomain() . '/api/v4/' . $kind;
+		return "https://" . $this->getDomain() . "/api/v4/" . $kind;
 	}
 	
 	
@@ -96,7 +96,7 @@ class Client
 	public function getAccountUrl($fields = [])
 	{
 		$str = implode(",", $fields);
-		return "https://" . $this->getDomain() . '/api/v4/account?with='.$str;
+		return "https://" . $this->getDomain() . "/api/v4/account?with=".$str;
 	}
 	
 	
@@ -112,19 +112,19 @@ class Client
 		curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
 		curl_setopt($curl, CURLOPT_USERAGENT, static::getUserAgent());
 		curl_setopt($curl, CURLOPT_URL, $url);
-		curl_setopt($curl, CURLOPT_HTTPHEADER, array('Content-Type: application/json'));
+		curl_setopt($curl, CURLOPT_HTTPHEADER, array("Content-Type: application/json"));
 		curl_setopt($curl, CURLOPT_HEADER, false);
 		curl_setopt($curl, CURLOPT_SSL_VERIFYPEER, 0);
 		curl_setopt($curl, CURLOPT_SSL_VERIFYHOST, 0);
 		
 		if ($post != null)
 		{
-			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, 'POST');
+			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "POST");
 			curl_setopt($curl, CURLOPT_POSTFIELDS, json_encode($post));
 		}
 		else
 		{
-			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, 'GET');
+			curl_setopt($curl, CURLOPT_CUSTOMREQUEST, "GET");
 		}
 		
 		if ($headers != null && count($headers) > 0)
@@ -266,13 +266,25 @@ class Client
 	
 	
 	/**
+	 * Возвращает список полей
+	 */
+	public function getCustomFields()
+	{
+		if (!$this->account_info) return [];
+		return isset($this->account_info["contacts_custom_fields"]) ?
+			$this->account_info["contacts_custom_fields"] : [];
+	}
+	
+	
+	/**
 	 * Возвращает текущую воронку
 	 */
 	public function getCurrentPipeline()
 	{
 		if (!$this->account_info) return null;
-		return isset($this->account_info["current_pipeline"]) ?
+		$id = isset($this->account_info["current_pipeline"]) ?
 			$this->account_info["current_pipeline"] : null;
+		return (int)$id;
 	}
 	
 	
@@ -282,8 +294,31 @@ class Client
 	public function getCurrentStatus()
 	{
 		if (!$this->account_info) return null;
-		return isset($this->account_info["current_status"]) ?
+		$id = isset($this->account_info["current_status"]) ?
 			$this->account_info["current_status"] : null;
+		return (int)$id;
+	}
+	
+	
+	/**
+	 * Возвращает текущий email
+	 */
+	public function getCurrentEmail()
+	{
+		if (!$this->account_info) return null;
+		return isset($this->account_info["current_email"]) ?
+			$this->account_info["current_email"] : null;
+	}
+	
+	
+	/**
+	 * Возвращает текущий телефон
+	 */
+	public function getCurrentPhone()
+	{
+		if (!$this->account_info) return null;
+		return isset($this->account_info["current_phone"]) ?
+			$this->account_info["current_phone"] : null;
 	}
 	
 	
@@ -295,9 +330,9 @@ class Client
 		if (!$this->isAuth()) return;
 		
 		/* Отправляем запрос API */
-		$url = $this->getAccountUrl(['users_groups', 'task_types']);
+		$url = $this->getAccountUrl(["users_groups", "task_types"]);
 		list($out, $code, $response) = $this->sendApi($url);
-		if (!$response || !isset($response['_embedded']))
+		if (!$response || !isset($response["_embedded"]))
 		{
 			return false;
 		}
@@ -309,19 +344,29 @@ class Client
 		}
 		
 		/* Анализируем ответ */
-		$data = $response['_embedded'];
+		$data = $response["_embedded"];
 		$this->account_info["timestamp"] = time() + $this->cache_timeout;
-		$this->account_info["users_groups"] = isset($data['users_groups']) ?
-			$data['users_groups'] : [];
-		$this->account_info["task_types"] = isset($data['task_types']) ? $data['task_types'] : [];
+		$this->account_info["users_groups"] = isset($data["users_groups"]) ?
+			$data["users_groups"] : [];
+		$this->account_info["task_types"] = isset($data["task_types"]) ? $data["task_types"] : [];
 				
 		/* Получить список воронок */
 		$url = $this->getSearchUrl("leads/pipelines");
 		list($out, $code, $response) = $this->sendApi($url);
-		if ($response && isset($response['_embedded']))
+		if ($response && isset($response["_embedded"]))
 		{
-			$data = $response['_embedded'];
+			$data = $response["_embedded"];
 			$this->account_info["pipelines"] = isset($data["pipelines"]) ? $data["pipelines"] : [];
+		}
+		
+		/* Получить список полей контакта */
+		$url = $this->getSearchUrl("contacts/custom_fields");
+		list($out, $code, $response) = $this->sendApi($url);
+		if ($response && isset($response["_embedded"]))
+		{
+			$data = $response["_embedded"];
+			$this->account_info["contacts_custom_fields"] =
+				isset($data["custom_fields"]) ? $data["custom_fields"] : [];
 		}
 		
 		/* Сохранить */
@@ -387,7 +432,7 @@ class Client
 		/* Проверка авторизации */
 		if ($this->isAuth())
 		{
-			if ($this->auth["server_time"] + $this->auth["expires_in"] < time() - 60 * 60)
+			if ($this->auth["server_time"] + $this->auth["expires_in"] < time() + 7 * 60 * 60)
 			{
 				$this->refresh_token = $this->auth["refresh_token"];
 			}
@@ -418,15 +463,15 @@ class Client
      */
     public function search($params)
     {
-		$kind = isset($params['kind']) ? $params['kind'] : "";
-		$type = isset($params['type']) ? $params['type'] : "";
-		$id = isset($params['id']) ? (int)$params['id'] : 0;
-		$element_id = isset($params['element_id']) ? (int)$params['element_id'] : null;
-		$query = isset($params['query']) ? $params['query'] : "";
-		$offset = isset($params['offset']) ? (int)$params['offset'] : null;
-		$limit = isset($params['limit']) ? (int)$params['limit'] : null;
-		$modified_since = isset($params['modified_since']) ? (int)$params['modified_since'] : null;
-		if ($limit > 500) $limit = 500;
+		$kind = isset($params["kind"]) ? $params["kind"] : "";
+		$type = isset($params["type"]) ? $params["type"] : "";
+		$id = isset($params["id"]) ? (int)$params["id"] : 0;
+		$element_id = isset($params["element_id"]) ? (int)$params["element_id"] : null;
+		$query = isset($params["query"]) ? $params["query"] : "";
+		$offset = isset($params["offset"]) ? (int)$params["offset"] : null;
+		$limit = isset($params["limit"]) ? (int)$params["limit"] : null;
+		$modified_since = isset($params["modified_since"]) ? (int)$params["modified_since"] : null;
+		if ($limit > 250) $limit = 250;
 		
 		$url = $this->getSearchUrl($kind);
 		
@@ -448,10 +493,10 @@ class Client
 		{
 			$dt = new \DateTime();
 			$dt->setTimestamp($modified_since);
-			$headers[] = 'IF-MODIFIED-SINCE: ' . $dt->format(\DateTime::RFC1123);
+			$headers[] = "IF-MODIFIED-SINCE: " . $dt->format(\DateTime::RFC1123);
 		}
 		
-		list($out, $code, $response) = $this->curl($url, null, $headers);
+		list($out, $code, $response) = $this->sendApi($url, null, $headers);
 		if ($response === null)
 		{
 			if ($code != 200 and $code != 204)
@@ -461,7 +506,7 @@ class Client
 			return [];
 		}
 		
-		return $response['_embedded']['items'];
+		return $response;
     }
 	
 	
@@ -471,8 +516,8 @@ class Client
 	public function getDeal($deal_id)
 	{
 		$items = $this->search([
-			'kind'=>static::SEARCH_LEADS,
-			'id'=>$deal_id,
+			"kind"=>static::SEARCH_LEADS,
+			"id"=>$deal_id,
 		]);
 		if ($items == null) return null;
 		return array_shift($items);
@@ -484,12 +529,24 @@ class Client
 	 */
 	public function getContact($contact_id)
 	{
-		$items = $this->search([
-			'kind'=>static::SEARCH_CONTACT,
-			'id'=>$contact_id,
+		$response = $this->search([
+			"kind"=>static::SEARCH_CONTACT,
+			"id"=>$contact_id,
 		]);
+		if ($response == null) return [];
+		
+		/* Parse response */
+		$items = isset($response["_embedded"]["contacts"]) ?
+			$response["_embedded"]["contacts"] : null;
 		if ($items == null) return null;
-		return array_shift($items);
+		
+		/* Get item */
+		$item = array_shift($items);
+		if ($item == null) return null;
+		
+		/* Parse contact */
+		$item = $this->parseContactsFields($item);
+		return $item;
 	}
 	
 	
@@ -498,11 +555,16 @@ class Client
 	 */
 	public function findContact($query)
 	{
-		$items = $this->search([
-			'kind'=>static::SEARCH_CONTACT,
-			'query'=>$query,
+		$response = $this->search([
+			"kind"=>static::SEARCH_CONTACT,
+			"query"=>$query,
 		]);
+		if ($response == null) return [];
+		
+		$items = isset($response["_embedded"]["contacts"]) ?
+			$response["_embedded"]["contacts"] : null;
 		if ($items == null) return [];
+		
 		return $items;
 	}
 	
@@ -512,9 +574,9 @@ class Client
 	 */
 	public function findClient($client)
 	{
-		$name = isset($client['name']) ? $client['name'] : '';
-		$phone = isset($client['phone']) ? $client['phone'] : '';
-		$email = isset($client['email']) ? $client['email'] : '';
+		$name = isset($client["name"]) ? $client["name"] : "";
+		$phone = isset($client["phone"]) ? $client["phone"] : "";
+		$email = isset($client["email"]) ? $client["email"] : "";
 		
 		$result = [];
 		if ($phone != "") $result = array_merge($result, $this->findContact($phone));
@@ -531,10 +593,10 @@ class Client
 				$candidate_grade = $grade;
 				$candidate = $item;
 			}
-			
 		}
 		
-		return [$candidate, $candidate_grade];
+		if ($candidate) $candidate["grade"] = $candidate_grade;
+		return $candidate;
 	}
 	
 	
@@ -543,60 +605,61 @@ class Client
 	 */
 	public function createClient($client)
 	{
-		$name = isset($client['name']) ? $client['name'] : '';
-		$tags = isset($client['tags']) ? $client['tags'] : '';
-		$phone = isset($client['phone']) ? $client['phone'] : '';
-		$email = isset($client['email']) ? $client['email'] : '';
-		$manager_id = isset($client['manager_id']) ? $client['manager_id'] : 0;
-		
-		if ($manager_id == 0)
-		{
-			throw new \Exception("Create client error. Manager id is null");
-		}
+		$name = isset($client["name"]) ? $client["name"] : "";
+		$tags = isset($client["tags"]) ? $client["tags"] : "";
+		$phone = isset($client["phone"]) ? $client["phone"] : "";
+		$email = isset($client["email"]) ? $client["email"] : "";
+		$manager_id = isset($client["manager_id"]) ? $client["manager_id"] : 0;
 		
 		$contact = [
-			'name' => $name,
-			'tags' => $tags,
-			'created_at' => time(),
-			'custom_fields' => [],
-			'responsible_user_id' => $manager_id,
+			"name" => $name,
+			"first_name" => $name,
+			"created_at" => time(),
+			"custom_fields_values" => [],
 		];
-		
-		if ($phone != "" and $this->phone_id != "")
+		if ($manager_id > 0)
 		{
-			$contact['custom_fields'][] = [
-				'id' => $this->phone_id,
-				'values' => array(
+			$contact["responsible_user_id"] = $manager_id;
+		}
+		
+		$phone_id = $this->getCurrentPhone();
+		if ($phone != "" and $phone_id > 0)
+		{
+			$contact["custom_fields_values"][] = [
+				"field_id" => (int)$phone_id,
+				"values" => array(
 					array(
-						'value' => $phone,
-						'enum' => "MOB"
+						"value" => $phone,
+						//"enum" => "MOB"
 					)
 				),
 			];
 		}
 		
-		if ($email != "" && $this->email_id != "")
+		$email_id = $this->getCurrentEmail();
+		if ($email != "" && $email_id > 0)
 		{
-			$contact['custom_fields'][] = [
-				'id' => $this->email_id,
-				'values' => array(
+			$contact["custom_fields_values"][] = [
+				"field_id" => (int)$email_id,
+				"values" => array(
 					array(
-						'value' => $email,
-						'enum' => "WORK"
+						"value" => $email,
+						//"enum" => "WORK"
 					)
 				),
 			];
 		}
 		
-		// Send request
-		$url = $this->getSearchUrl('contacts');
-		list($out, $code, $response) = $this->curl($url, ['add'=>[$contact]]);
+		/* Send request */
+		$url = $this->getSearchUrl("contacts");
+		list($out, $code, $response) = $this->sendApi($url, [$contact]);
 		if ($response)
 		{
-			$Items = $response['_embedded']['items'];
-			$Item = array_shift($Items);
-			if ($Item){
-				return $Item['id'];
+			$items = $response["_embedded"]["contacts"];
+			$item = array_shift($items);
+			if ($item)
+			{
+				return $item["id"];
 			}
 		}
 		else
@@ -615,12 +678,11 @@ class Client
 	 */
 	public function createDeal($deal)
 	{
-		$deal_name = isset($deal['deal_name']) ? $deal['deal_name'] : "Заказ";
-		$contact_id = isset($deal['contact_id']) ? $deal['contact_id'] : 0;
-		$pipeline_id = isset($deal['pipeline_id']) ? $deal['pipeline_id'] : 0;
-		$status_id = isset($deal['status_id']) ? $deal['status_id'] : 0;
-		$manager_id = isset($deal['manager_id']) ? $deal['manager_id'] : 0;
-		$data = isset($deal['data']) ? $deal['data'] : [];
+		$deal_name = isset($deal["deal_name"]) ? $deal["deal_name"] : "Заказ";
+		$contact_id = isset($deal["contact_id"]) ? $deal["contact_id"] : 0;
+		$pipeline_id = isset($deal["pipeline_id"]) ? $deal["pipeline_id"] : 0;
+		$status_id = isset($deal["status_id"]) ? $deal["status_id"] : 0;
+		$manager_id = isset($deal["manager_id"]) ? $deal["manager_id"] : 0;
 		
 		if ($contact_id == 0)
 		{
@@ -634,44 +696,38 @@ class Client
 		{
 			throw new \Exception("Create deal error. Status id is null");
 		}
-		if ($manager_id == 0)
-		{
-			throw new \Exception("Create deal error. Manager id is null");
-		}
 		
 		$send = [
-			'name' => $deal_name,
-			'created_at' => time(),
-			'sale' => 0,
-			'pipeline_id' => $pipeline_id,
-			'status_id' => $status_id,
-			'responsible_user_id' => $manager_id,
-			'contacts_id' => [
-				$contact_id,
+			"name" => $deal_name,
+			"created_at" => time(),
+			"pipeline_id" => (int)$pipeline_id,
+			"status_id" => (int)$status_id,
+			"_embedded" => [
+				"contacts" => [
+					[
+						"id" => (int)$contact_id,
+						"is_main" => true,
+					]
+				],
 			],
-			'custom_fields' => [],
+			"custom_fields_values" => [],
 		];
+		if ($manager_id > 0)
+		{
+			$send["responsible_user_id"] = $manager_id;
+		}
 		
-		$url = $this->getSearchUrl('leads');
-		list($out, $code, $response) = $this->curl($url, ['add'=>[$send]]);
+		$url = $this->getSearchUrl("leads");
+		list($out, $code, $response) = $this->sendApi($url, [$send]);
 		if ($response)
 		{
-			$response = isset($response['_embedded']) ? $response['_embedded'] : null;
-			if ($response)
-			{
-				$items = isset($response['items']) ? $response['items'] : null;
-				if ($items && count($items) > 0)
-				{
-					$item = $items[0];
-					$deal_id = isset($item['id']) ? $item['id'] : null;
-					return $deal_id;
-				}
-			}
+			$items = $response["_embedded"]["leads"];
+			$item = array_shift($items);
+			if ($item) return $item["id"];
 		}
 		else
 		{
 			throw new \Exception("Create deal error. Response error " . $code);
-			//var_dump( @json_decode($out, true) );
 		}
 		
 		return 0;
@@ -684,8 +740,8 @@ class Client
 	public static function mb_trim($name)
 	{
 		if ($name == null) return "";
-		$name = preg_replace('/^[\x00-\x1F\x7F\s]+/u', '', $name);
-		$name = preg_replace('/[\x00-\x1F\x7F\s]+$/u', '', $name); 
+		$name = preg_replace("/^[\x00-\x1F\x7F\s]+/u", "", $name);
+		$name = preg_replace("/[\x00-\x1F\x7F\s]+$/u", "", $name); 
 		return $name;
 	}
 	
@@ -695,20 +751,21 @@ class Client
 	 */
 	public static function getItemFieldValue($item, $field_id)
 	{
-		$custom_fields = isset($item['custom_fields']) ? $item['custom_fields'] : null;
+		$custom_fields = isset($item["custom_fields_values"]) ?
+			$item["custom_fields_values"] : null;
 		if ($custom_fields == null) return [];
 		
 		$res = [];
 		foreach ($custom_fields as $field)
 		{
-			$values = isset($field['values']) ? $field['values'] : null;
-			if ($field['id'] == $field_id and $values != null)
+			$values = isset($field["values"]) ? $field["values"] : null;
+			if ($field["field_id"] == $field_id and $values != null)
 			{
-				if (gettype($values) == 'array')
+				if (gettype($values) == "array")
 				{
 					foreach ($values as $v)
 					{
-						$value = isset($v['value']) ? $v['value'] : "";
+						$value = isset($v["value"]) ? $v["value"] : "";
 						if ($value) $res[] = $value;
 					}
 				}
@@ -723,18 +780,11 @@ class Client
 	/**
 	 * Parser contacts
 	 */
-	public function parseContactsFields($item, $phone_id, $email_id)
+	public function parseContactsFields($item)
 	{
-		$result = [
-			'item' => $item,
-		];
-		
-		$result['id'] = isset($item['id']) ? $item['id'] : '';
-		$result['name'] = isset($item['name']) ? $item['name'] : '';
-		$result['phones'] = static::getItemFieldValue($item, $this->phone_id);
-		$result['emails'] = static::getItemFieldValue($item, $this->email_id);
-		
-		return $result;
+		$item["phones"] = static::getItemFieldValue($item, $this->getCurrentPhone());
+		$item["emails"] = static::getItemFieldValue($item, $this->getCurrentEmail());
+		return $item;
 	}
 	
 	
@@ -747,13 +797,13 @@ class Client
 	{
 		$grade = 0;
 		
-		$client_name = static::mb_trim(isset($client['name']) ? $client['name'] : '');
-		$client_phone = static::mb_trim(isset($client['phone']) ? $client['phone'] : '');
-		$client_email = static::mb_trim(isset($client['email']) ? $client['email'] : '');
+		$client_name = static::mb_trim(isset($client["name"]) ? $client["name"] : "");
+		$client_phone = static::mb_trim(isset($client["phone"]) ? $client["phone"] : "");
+		$client_email = static::mb_trim(isset($client["email"]) ? $client["email"] : "");
 		
-		$item_name = static::mb_trim(isset($item['name']) ? $item['name'] : '');
-		$item_phones = isset($item['phones']) ? $item['phones'] : [];
-		$item_emails = isset($item['emails']) ? $item['emails'] : [];
+		$item_name = static::mb_trim(isset($item["name"]) ? $item["name"] : "");
+		$item_phones = isset($item["phones"]) ? $item["phones"] : [];
+		$item_emails = isset($item["emails"]) ? $item["emails"] : [];
 		
 		$client_name = mb_strtolower($client_name);
 		$client_email = mb_strtolower($client_email);
@@ -773,10 +823,10 @@ class Client
 		
 		# Поиск по телефону
 		$find = false;
-		$client_phone = preg_replace("/[^0-9]/", '', $client_phone);
+		$client_phone = preg_replace("/[^0-9]/", "", $client_phone);
 		foreach ($item_phones as $val)
 		{
-			$val = preg_replace("/[^0-9]/", '', $val);
+			$val = preg_replace("/[^0-9]/", "", $val);
 			if ($client_phone == $val && $val != "")
 			{
 				$grade += 7;
@@ -807,46 +857,5 @@ class Client
 		}
 		
 		return $grade;
-	}
-	
-	
-	/**
-	 * Get user name by id
-	 */
-	function getUserName($users, $user_id)
-	{
-		foreach ($users as $user)
-		{
-			if ($user['id'] == $user_id) return $user['name'];
-		}
-		return "";
-	}
-	
-	
-	/**
-	 * Get user name by id
-	 */
-	function getPipelineStatusName($pipelines, $pipeline_id, $status_id)
-	{
-		foreach ($pipelines as $pipeline)
-		{
-			if
-			(
-				$pipeline['id'] == $pipeline_id and
-				isset($pipeline['statuses']) and
-				gettype($pipeline['statuses']) == 'array'
-			)
-			{
-				foreach ($pipeline['statuses'] as $status)
-				{
-					if ($status['id'] == $status_id)
-					{
-						return [$pipeline['name'], $status['name']];
-					}
-				}
-			
-			}
-		}
-		return "";
 	}
 }

@@ -159,16 +159,16 @@ class Settings
 		$client->readSettings();
 		
 		echo "<style>
-		.amocrm_settings label{
+		.amocrm_settings .amocrm_label{
 			display: block;
 			margin-bottom: 5px;
-		}
-		.amocrm_settings p{
-			padding: 0; margin: 15px 0;
 		}
 		.amocrm_settings_buttons{
 			display: flex;
 			gap: 10px;
+		}
+		.amocrm_field{
+			margin: 15px 0;
 		}
 		.amocrm_field_group{
 			display: flex;
@@ -199,9 +199,11 @@ class Settings
 		
 		/* Воронка */
 		$pipelines = $client->getPipelines();
+		$custom_fields = $client->getCustomFields();
 		$current_pipeline = $client->getCurrentPipeline();
 		$current_status = $client->getCurrentStatus();
-		echo "<p><label for='amocrm_pipeline'>Воронка:</label>";
+		echo "<div class='amocrm_field'>";
+		echo "<div class='amocrm_label'><label for='amocrm_pipeline'>Воронка:</label></div>";
 		echo "<div class='amocrm_field_group'>";
 		echo "<select type='text' id='amocrm_pipeline' name='amocrm_pipeline'>";
 		echo "<option>Выбрать значение</option>";
@@ -217,13 +219,46 @@ class Settings
 			Обновить данные</button>";
 		echo "</div>";
 		echo "<div class='amocrm_settings_result' style='margin-top: 10px;'></div>";
-		echo "</p>";
+		echo "</div>";
 		
 		/* Статус */
-		echo "<p><label for='amocrm_pipeline_status'>Статус:</label>";
+		echo "<div class='amocrm_field'>";
+		echo "<div class='amocrm_label'><label for='amocrm_pipeline_status'>Статус:</label></div>";
 		echo "<select type='text' id='amocrm_pipeline_status' name='amocrm_pipeline_status'>";
 		echo "</select>";
-		echo "</p>";
+		echo "</div>";
+		
+		/* Поле email */
+		echo "<div class='amocrm_field'>";
+		echo "<div class='amocrm_label'><label for='amocrm_email_id'>Email:</label></div>";
+		echo "<select type='text' id='amocrm_email_id' name='amocrm_email_id'>";
+		echo "<option>Выбрать значение</option>";
+		$current_email = $client->getCurrentEmail();
+		foreach ($custom_fields as $custom_field)
+		{
+			$id = $custom_field["id"];
+			$selected = $id == $current_email ? " selected" : "";
+			echo "<option value='" . esc_attr($id) . "'{$selected}>" .
+				esc_html($custom_field["name"]) . "</option>";
+		}
+		echo "</select>";
+		echo "</div>";
+		
+		/* Поле телефон */
+		echo "<div class='amocrm_field'>";
+		echo "<div class='amocrm_label'><label for='amocrm_phone_id'>Телефон:</label></div>";
+		echo "<select type='text' id='amocrm_phone_id' name='amocrm_phone_id'>";
+		echo "<option>Выбрать значение</option>";
+		$current_phone = $client->getCurrentPhone();
+		foreach ($custom_fields as $custom_field)
+		{
+			$id = $custom_field["id"];
+			$selected = $id == $current_phone ? " selected" : "";
+			echo "<option value='" . esc_attr($id) . "'{$selected}>" .
+				esc_html($custom_field["name"]) . "</option>";
+		}
+		echo "</select>";
+		echo "</div>";
 		
 		/* Кнопки настроек */
 		echo "<div class='amocrm_settings_buttons'>";
@@ -281,6 +316,7 @@ class Settings
 					if (pipeline_status == undefined) pipeline_status = select.val();
 					select.empty();
 					select.append(this.createOption('', 'Выбрать статус'));
+					if (pipeline == null) return;
 					for (var i=0; i<pipeline._embedded.statuses.length; i++)
 					{
 						var status = pipeline._embedded.statuses[i];
@@ -302,7 +338,7 @@ class Settings
 			window.amocrm.updatePipeline(" . json_encode($current_status) . ");
 			
 			$('.amocrm_oauth').on('click', function(){
-				var url = 'https://www.amocrm.ru/oauth?client_id=' + window.amocrm_client_id;
+				var url = 'https://www.amocrm.ru/oauth?client_id=' + window.amocrm.client_id;
 				url += '&state=code&mode=post_message';
 				window.open(
 					url, 'Предоставить доступ',
@@ -390,6 +426,10 @@ class Settings
 			$_POST["amocrm_pipeline"] : "";
 		$client->account_info["current_status"] = isset($_POST["amocrm_pipeline_status"]) ?
 			$_POST["amocrm_pipeline_status"] : "";
+		$client->account_info["current_email"] = isset($_POST["amocrm_email_id"]) ?
+			$_POST["amocrm_email_id"] : "";
+		$client->account_info["current_phone"] = isset($_POST["amocrm_phone_id"]) ?
+			$_POST["amocrm_phone_id"] : "";
 		$client->saveAccountInfo();
 		
 		return true;
@@ -401,8 +441,9 @@ class Settings
 	 */
 	function add_field($id, $label, $value)
 	{
-		echo "<p><label for='{$id}'>{$label}:</label>";
+		echo "<div class='amocrm_field'>";
+		echo "<div class='amocrm_label'><label for='{$id}'>{$label}:</label></div>";
 		echo "<input type='text' id='{$id}' name='{$id}' value='" . esc_attr($value) . "' class='regular-text' />";
-		echo "</p>";
+		echo "</div>";
 	}
 }

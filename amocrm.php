@@ -24,10 +24,11 @@ if (!defined("ABSPATH")) exit;
 function load_elberos_amocrm()
 {
 	include_once __DIR__ . "/src/Client.php";
+	include_once __DIR__ . "/src/Import.php";
 	include_once __DIR__ . "/src/Settings.php";
 }
 
-/* Disable updates */
+/* Отключить обновления плагина */
 add_filter("site_transient_update_plugins", function($value){
 	$name = plugin_basename(__FILE__);
 	if (isset($value->response[$name]))
@@ -37,7 +38,7 @@ add_filter("site_transient_update_plugins", function($value){
 	return $value;
 });
 
-/* Register admin menu */
+/* Добавить элементы в админку WordPress */
 add_action('admin_menu', function(){
 	add_menu_page(
 		'AmoCRM', 'AmoCRM', 
@@ -52,7 +53,7 @@ add_action('admin_menu', function(){
 	);
 });
 
-/* Update settings */
+/* Api обновить данные аккаунта из AmoCRM */
 add_action('wp_ajax_amocrm_settings', function(){
 	
 	if (!isset($_POST['_nonce']) || !wp_verify_nonce($_POST['_nonce'], 'amocrm_settings_nonce'))
@@ -66,7 +67,7 @@ add_action('wp_ajax_amocrm_settings', function(){
 	wp_send_json($json);
 });
 
-/* Register json auth */
+/* Api авторизация в AmoCRM */
 add_action('wp_ajax_amocrm_auth', function(){
 	
 	if (!isset($_POST['_nonce']) || !wp_verify_nonce($_POST['_nonce'], 'amocrm_auth_nonce'))
@@ -79,4 +80,23 @@ add_action('wp_ajax_amocrm_auth', function(){
 	$auth_code = isset($_POST["auth_code"]) ? $_POST["auth_code"] : "";
 	$json = $settings->apiAuth($auth_code);
 	wp_send_json($json);
+});
+
+/* Регистрация задач cron */
+add_filter('cron_schedules', function(){
+	$schedules['amocrm_import'] = array(
+		'interval' => 120, // Каждые 2 минуты
+		'display'  => 'Once Two Minute',
+	);
+	return $schedules;
+});
+if (!wp_next_scheduled('amocrm_import'))
+{
+	wp_schedule_event(time() + 60, 'amocrm_import', 'amocrm_import');
+}
+add_action('amocrm_import', function(){
+	load_elberos_amocrm();
+	$import = new \Elberos\AmoCRM\Import();
+	$import->import();
+	//$import->test();
 });
