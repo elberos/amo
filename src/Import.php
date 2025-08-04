@@ -53,6 +53,10 @@ class Import
 			{
 				$client["phone"] = isset($row["value"]) ? $row["value"] : "";
 			}
+			else if ($row["id"] == "input-message")
+			{
+				$client["message"] = isset($row["value"]) ? $row["value"] : "";
+			}
 		}
 		return $client;
 	}
@@ -121,6 +125,10 @@ class Import
 			"pipeline_id" => $this->client->getCurrentPipeline(),
 			"status_id" => $this->client->getCurrentStatus(),
 		]);
+		if ($deal_id && isset($client_data["message"]))
+		{
+			$this->client->createTextNote($deal_id, $client_data["message"]);
+		}
 		
 		return [
 			"client_id" => $client_id,

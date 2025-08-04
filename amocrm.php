@@ -98,5 +98,4 @@ add_action('amocrm_import', function(){
 	load_elberos_amocrm();
 	$import = new \Elberos\AmoCRM\Import();
 	$import->import();
-	//$import->test();
 });

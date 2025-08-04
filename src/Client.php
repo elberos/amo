@@ -735,6 +735,47 @@ class Client
 	
 	
 	/**
+	 * Create note
+	 */
+	public function createTextNote($lead_id, $text)
+	{
+		$text = static::mb_trim($text);
+		if ($lead_id == 0)
+		{
+			throw new \Exception("Lead id is null");
+		}
+		if ($text == "")
+		{
+			throw new \Exception("Text is null");
+		}
+		
+		$send = [
+			"entity_id" => (int)$lead_id,
+			"note_type" => "common",
+			"is_need_to_trigger_digital_pipeline" => false,
+			"params" => [
+				"text" => $text,
+			]
+		];
+		
+		$url = $this->getSearchUrl("leads/notes");
+		list($out, $code, $response) = $this->sendApi($url, [$send]);
+		if ($response)
+		{
+			$items = $response["_embedded"]["notes"];
+			$item = array_shift($items);
+			if ($item) return $item["id"];
+		}
+		else
+		{
+			throw new \Exception("Create note error. Response error " . $code);
+		}
+		
+		return 0;
+	}
+	
+	
+	/**
 	 * Trim UTF-8 string
 	 */
 	public static function mb_trim($string)
